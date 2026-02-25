@@ -1,0 +1,77 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Asistencia Enrique de Ossó IV</title>
+    <script src="https://unpkg.com/html5-qrcode"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap" rel="stylesheet">
+    <style>
+        :root { --primary: #e11d48; --success: #22c55e; --warning: #f59e0b; --danger: #ef4444; --info: #3b82f6; }
+        body { font-family: 'Inter', sans-serif; background: #f8fafc; margin: 0; padding-bottom: 40px; }
+        .header { background: var(--primary); color: white; padding: 20px; text-align: center; border-bottom: 4px solid #991b1b; }
+        .container { max-width: 450px; margin: auto; padding: 10px; }
+        .card { background: white; border-radius: 16px; padding: 15px; box-shadow: 0 4px 6px rgba(0,0,0,0.05); margin-bottom: 15px; border: 1px solid #e2e8f0; }
+        .stats-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 15px; }
+        .stat-box { padding: 15px; border-radius: 12px; color: white; text-align: center; }
+        .stat-val { font-size: 1.8rem; font-weight: 800; display: block; }
+        .btn { background: #1e293b; color: white; border: none; padding: 14px; border-radius: 10px; width: 100%; cursor: pointer; font-weight: bold; font-size: 1rem; }
+        #reader { border-radius: 12px; overflow: hidden; background: black; width: 100% !important; }
+        .badge { padding: 4px 8px; border-radius: 6px; color: white; font-size: 0.75rem; font-weight: bold; }
+        table { width: 100%; border-collapse: collapse; font-size: 0.85rem; }
+        td, th { padding: 12px 8px; border-bottom: 1px solid #f1f5f9; text-align: left; }
+        select, input { padding: 12px; border: 1px solid #cbd5e1; border-radius: 8px; width: 100%; margin-top: 8px; }
+    </style>
+</head>
+<body>
+
+<div class="header">
+    <h1 style="margin:0; font-size:1.3rem;">🍄 ASISTENCIA OSSÓ IV</h1>
+    <div id="displayFecha" style="font-size:0.9rem; margin-top:8px; opacity:0.9;"></div>
+</div>
+
+<div class="container">
+    <div class="card">
+        <div id="reader"></div>
+        <div id="panelResultado" style="display:none; text-align:center;">
+            <h2 id="resNombre"></h2>
+            <div id="resEmoji" style="font-size:4rem;"></div>
+            <button class="btn" onclick="reiniciarScanner()">SIGUIENTE ESCANEO</button>
+        </div>
+    </div>
+
+    <div class="stats-grid">
+        <div class="stat-box" style="background:var(--success)"><span class="stat-val" id="sP">0</span>Presentes</div>
+        <div class="stat-box" style="background:var(--warning)"><span class="stat-val" id="sA">0</span>Atrasos</div>
+        <div class="stat-box" style="background:var(--danger)"><span class="stat-val" id="sF">0</span>Faltas</div>
+        <div class="stat-box" style="background:var(--info)"><span class="stat-val" id="sL">0</span>Licencias</div>
+    </div>
+
+    <button class="btn" style="background:var(--danger); margin-bottom: 20px;" onclick="finalizarDia()">🏁 FINALIZAR DÍA (FALTAS)</button>
+
+    <div class="card">
+        <h3 style="margin:0; font-size:1rem; color:var(--info);">📝 Registro Manual / Licencia</h3>
+        <select id="licNombre"><option value="">Cargando...</option></select>
+        <select id="licEstado">
+            <option value="L">Licencia</option>
+            <option value="P">Presente (Manual)</option>
+        </select>
+        <button class="btn" style="background:var(--info); margin-top:10px;" onclick="registrarManual()">GUARDAR</button>
+    </div>
+
+    <div class="card">
+        <h3 style="margin:0; font-size:1rem;">🔍 Buscador</h3>
+        <input type="date" id="busFecha">
+        <button class="btn" style="margin-top:10px;" onclick="buscarRegistros()">VER REGISTROS</button>
+        <div id="contTabla" style="display:none; margin-top:15px;">
+            <table>
+                <thead><tr><th>Alumno</th><th>Hora</th><th>Est.</th></tr></thead>
+                <tbody id="bodyTabla"></tbody>
+            </table>
+        </div>
+    </div>
+</div>
+
+<script src="app.js"></script>
+</body>
+</html>
