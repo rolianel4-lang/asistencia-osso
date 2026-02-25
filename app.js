@@ -2,13 +2,13 @@ const SUPABASE_URL = "https://cplmxkvlrmiwunpojxke.supabase.co";
 const SUPABASE_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImNwbG14a3Zscm1pd3VucG9qeGtlIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzE5NjMwMTYsImV4cCI6MjA4NzUzOTAxNn0.ZugTlGxz38vBv7H9Cyn6Uq_HiKc7Za9rzDmO9RU--lc";
 const HORA_ENTRADA = "08:00"; 
 
-// PEGA AQUÍ LA URL QUE COPIASTE DE GOOGLE APPS SCRIPT
-const GOOGLE_SCRIPT_URL = "https://script.google.com/macros/s/AKfycbzvA5OimyumTGVMHviQrsKS7xu3dgiPhuNzregcZPWoJS6-lbrQWrO3zfpp--1gmw/exec";
+// --- CONFIGURACIÓN GOOGLE SHEETS ---
+const GOOGLE_SCRIPT_URL = "https://script.google.com/macros/s/AKfycbzY8t7Ih67FNxq20EgS87v-hPnmKVhb3ZQk1uEO_Z8qN6xnqh3uxXuFWYp9fipnz94/exec";
 
 let html5QrCode = new Html5Qrcode("reader");
 const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
 
-// --- UTILIDADES ---
+// --- AUDIO ---
 function playNote(freq, type, duration, vol = 0.1) {
     const osc = audioCtx.createOscillator();
     const gain = audioCtx.createGain();
@@ -22,20 +22,22 @@ function playNote(freq, type, duration, vol = 0.1) {
 const soundCoin = () => { playNote(987.77, 'sine', 0.1); setTimeout(() => playNote(1318.51, 'sine', 0.4), 100); };
 const soundError = () => { playNote(392, 'square', 0.1); setTimeout(() => playNote(261, 'square', 0.4), 300); };
 
+// --- FECHA Y HORA LOCAL (BOLIVIA) ---
 const obtenerFechaLocal = () => {
     const d = new Date();
-    const offset = d.getTimezoneOffset() * 60000;
-    const local = new Date(d.getTime() - offset);
-    return local.toISOString().split('T')[0];
+    const año = d.getFullYear();
+    const mes = String(d.getMonth() + 1).padStart(2, '0');
+    const dia = String(d.getDate()).padStart(2, '0');
+    return `${año}-${mes}-${dia}`;
 };
 
 const obtenerHoraLocal = () => {
     return new Date().toLocaleTimeString('es-BO', {hour12:false, hour:'2-digit', minute:'2-digit'});
 };
 
-// --- FUNCIÓN DE ENVÍO DUAL (Supabase + Google Sheets) ---
+// --- FUNCIÓN DE ENVÍO DUAL (SUPABASE + SHEETS) ---
 async function enviarASupabase(datos) {
-    // 1. Verificamos si ya existe registro hoy
+    // 1. Verificar duplicados en Supabase
     const resBusqueda = await fetch(`${SUPABASE_URL}/rest/v1/asistencias?estudiante_id=eq.${datos.estudiante_id}&fecha=eq.${datos.fecha}`, {
         headers: { 'apikey': SUPABASE_KEY }
     });
@@ -64,8 +66,8 @@ async function enviarASupabase(datos) {
         body: JSON.stringify(datos)
     });
 
-    // B. Envío a Google Sheets (en segundo plano)
-    if (GOOGLE_SCRIPT_URL !== "TU_URL_DE_EXEC_AQUÍ") {
+    // B. Envío a Google Sheets
+    if (GOOGLE_SCRIPT_URL !== "TU_URL_DE_APPS_SCRIPT_AQUÍ") {
         fetch(GOOGLE_SCRIPT_URL, {
             method: 'POST',
             mode: 'no-cors',
@@ -80,9 +82,7 @@ async function enviarASupabase(datos) {
     return res;
 }
 
-// ... EL RESTO DEL CÓDIGO (registrarAsistencia, registrarManual, etc.) SE MANTIENE IGUAL ...
-// (Para no hacer la respuesta eterna, pega aquí las funciones que ya teníamos abajo)
-
+// --- REGISTROS ---
 async function registrarAsistencia(codigo) {
     try {
         const fechaHoy = obtenerFechaLocal();
@@ -90,11 +90,13 @@ async function registrarAsistencia(codigo) {
         const resAlu = await fetch(`${SUPABASE_URL}/rest/v1/estudiantes?codigo_qr=eq.${codigo}`, {
             headers: { 'apikey': SUPABASE_KEY }
         }).then(r => r.json());
+        
         if (!resAlu.length) { soundError(); alert("🚫 QR Desconocido"); reiniciarScanner(); return; }
         const alumno = resAlu[0];
         const ahora = new Date();
         const [hE, mE] = HORA_ENTRADA.split(":").map(Number);
         const estado = (ahora.getHours() * 60 + ahora.getMinutes() <= hE * 60 + mE + 5) ? "P" : "A";
+
         await enviarASupabase({ 
             estudiante_id: alumno.id, 
             nombre_estudiante: alumno.nombre, 
@@ -102,9 +104,7 @@ async function registrarAsistencia(codigo) {
             hora: horaTexto, 
             estado: estado 
         });
-        soundCoin();
-        mostrarResultado(alumno.nombre, estado);
-        actualizarStats();
+        soundCoin(); mostrarResultado(alumno.nombre, estado); actualizarStats();
     } catch (e) { soundError(); alert("Error: " + e.message); reiniciarScanner(); }
 }
 
@@ -123,10 +123,44 @@ async function registrarManual() {
             hora: obtenerHoraLocal(), 
             estado: estado 
         });
-        soundCoin(); alert("✅ Guardado"); actualizarStats();
+        soundCoin(); alert("✅ Actualizado"); actualizarStats();
     } catch (e) { soundError(); alert("Error: " + e.message); }
 }
 
+// --- FINALIZAR DÍA (CON PAUSA PARA GOOGLE) ---
+async function finalizarDia() {
+    if(!confirm("¿Asignar falta a ausentes?")) return;
+    const fechaHoy = obtenerFechaLocal();
+    const alus = await fetch(`${SUPABASE_URL}/rest/v1/estudiantes`, { headers: { 'apikey': SUPABASE_KEY } }).then(r => r.json());
+    const asis = await fetch(`${SUPABASE_URL}/rest/v1/asistencias?fecha=eq.${fechaHoy}`, { headers: { 'apikey': SUPABASE_KEY } }).then(r => r.json());
+    const idsConAsistencia = asis.map(a => a.estudiante_id);
+    
+    const faltas = alus.filter(al => !idsConAsistencia.includes(al.id)).map(al => ({
+        estudiante_id: al.id, nombre_estudiante: al.nombre, fecha: fechaHoy, hora: "00:00", estado: "F"
+    }));
+
+    if(faltas.length > 0) {
+        // Guardar en Supabase (rápido)
+        await fetch(`${SUPABASE_URL}/rest/v1/asistencias`, {
+            method: 'POST',
+            headers: { 'apikey': SUPABASE_KEY, 'Authorization': `Bearer ${SUPABASE_KEY}`, 'Content-Type': 'application/json' },
+            body: JSON.stringify(faltas)
+        });
+
+        // Enviar a Sheets uno por uno con pausa de 300ms
+        alert("Procesando faltas en Google Sheets... espera un momento.");
+        for (let f of faltas) {
+            if (GOOGLE_SCRIPT_URL !== "TU_URL_DE_APPS_SCRIPT_AQUÍ") {
+                fetch(GOOGLE_SCRIPT_URL, { method: 'POST', mode: 'no-cors', body: JSON.stringify(f) });
+                await new Promise(r => setTimeout(r, 300));
+            }
+        }
+    }
+    alert("Faltas procesadas");
+    actualizarStats();
+}
+
+// --- OTROS ---
 async function actualizarStats() {
     try {
         const fechaHoy = obtenerFechaLocal();
@@ -166,30 +200,6 @@ async function buscarRegistros() {
     });
 }
 
-async function finalizarDia() {
-    if(!confirm("¿Asignar falta a ausentes?")) return;
-    const fechaHoy = obtenerFechaLocal();
-    const alus = await fetch(`${SUPABASE_URL}/rest/v1/estudiantes`, { headers: { 'apikey': SUPABASE_KEY } }).then(r => r.json());
-    const asis = await fetch(`${SUPABASE_URL}/rest/v1/asistencias?fecha=eq.${fechaHoy}`, { headers: { 'apikey': SUPABASE_KEY } }).then(r => r.json());
-    const idsConAsistencia = asis.map(a => a.estudiante_id);
-    const faltas = alus.filter(al => !idsConAsistencia.includes(al.id)).map(al => ({
-        estudiante_id: al.id, nombre_estudiante: al.nombre, fecha: fechaHoy, hora: "00:00", estado: "F"
-    }));
-    if(faltas.length > 0) {
-        await fetch(`${SUPABASE_URL}/rest/v1/asistencias`, {
-            method: 'POST',
-            headers: { 'apikey': SUPABASE_KEY, 'Authorization': `Bearer ${SUPABASE_KEY}`, 'Content-Type': 'application/json' },
-            body: JSON.stringify(faltas)
-        });
-        // También enviamos las faltas a Sheets una por una
-        faltas.forEach(f => {
-            fetch(GOOGLE_SCRIPT_URL, { method: 'POST', mode: 'no-cors', body: JSON.stringify(f) });
-        });
-    }
-    alert("Faltas procesadas correctamente");
-    actualizarStats();
-}
-
 function mostrarResultado(n, e) {
     document.getElementById("reader").style.display = "none";
     document.getElementById("panelResultado").style.display = "block";
@@ -213,7 +223,5 @@ function iniciarScanner() {
 window.onload = () => {
     document.getElementById('displayFecha').innerText = new Date().toLocaleDateString('es-ES', {weekday:'long', day:'numeric', month:'long'});
     document.getElementById('busFecha').value = obtenerFechaLocal();
-    actualizarStats();
-    cargarListaAlumnos();
-    iniciarScanner();
+    actualizarStats(); cargarListaAlumnos(); iniciarScanner();
 };
