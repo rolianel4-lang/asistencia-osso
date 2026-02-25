@@ -22,22 +22,12 @@ function playNote(freq, type, duration, vol = 0.1) {
 const soundCoin = () => { playNote(987.77, 'sine', 0.1); setTimeout(() => playNote(1318.51, 'sine', 0.4), 100); };
 const soundError = () => { playNote(392, 'square', 0.1); setTimeout(() => playNote(261, 'square', 0.4), 300); };
 
-// --- FECHA Y HORA LOCAL (BOLIVIA) ---
-const obtenerFechaLocal = () => {
-    const d = new Date();
-    const año = d.getFullYear();
-    const mes = String(d.getMonth() + 1).padStart(2, '0');
-    const dia = String(d.getDate()).padStart(2, '0');
-    return `${año}-${mes}-${dia}`;
-};
+// --- FECHA Y HORA ---
+const obtenerFechaLocal = () => new Date().toISOString().split('T')[0];
+const obtenerHoraLocal = () => new Date().toLocaleTimeString('es-BO', {hour12:false, hour:'2-digit', minute:'2-digit'});
 
-const obtenerHoraLocal = () => {
-    return new Date().toLocaleTimeString('es-BO', {hour12:false, hour:'2-digit', minute:'2-digit'});
-};
-
-// --- FUNCIÓN DE ENVÍO DUAL (SUPABASE + SHEETS) ---
+// --- ENVÍO DUAL ---
 async function enviarASupabase(datos) {
-    // 1. Verificar duplicados en Supabase
     const resBusqueda = await fetch(`${SUPABASE_URL}/rest/v1/asistencias?estudiante_id=eq.${datos.estudiante_id}&fecha=eq.${datos.fecha}`, {
         headers: { 'apikey': SUPABASE_KEY }
     });
@@ -49,155 +39,144 @@ async function enviarASupabase(datos) {
     if (existente && existente.length > 0) {
         metodo = 'PATCH';
         url += `?id=eq.${existente[0].id}`;
-        if (datos.hora === "00:00" || datos.hora === "--:--") {
-            datos.hora = obtenerHoraLocal();
-        }
     }
 
-    // A. Envío a Supabase
-    const res = await fetch(url, {
+    await fetch(url, {
         method: metodo,
-        headers: { 
-            'apikey': SUPABASE_KEY, 
-            'Authorization': `Bearer ${SUPABASE_KEY}`, 
-            'Content-Type': 'application/json',
-            'Prefer': 'return=minimal' 
-        },
+        headers: { 'apikey': SUPABASE_KEY, 'Authorization': `Bearer ${SUPABASE_KEY}`, 'Content-Type': 'application/json' },
         body: JSON.stringify(datos)
     });
 
-    // B. Envío a Google Sheets
     if (GOOGLE_SCRIPT_URL !== "TU_URL_DE_APPS_SCRIPT_AQUÍ") {
-        fetch(GOOGLE_SCRIPT_URL, {
-            method: 'POST',
-            mode: 'no-cors',
-            body: JSON.stringify(datos)
-        }).catch(e => console.log("Error Sheets:", e));
+        fetch(GOOGLE_SCRIPT_URL, { method: 'POST', mode: 'no-cors', body: JSON.stringify(datos) });
     }
-
-    if (!res.ok) {
-        const error = await res.json();
-        throw new Error(error.message);
-    }
-    return res;
 }
 
-// --- REGISTROS ---
+// --- REGISTRO QR ---
 async function registrarAsistencia(codigo) {
     try {
-        const fechaHoy = obtenerFechaLocal();
-        const horaTexto = obtenerHoraLocal();
         const resAlu = await fetch(`${SUPABASE_URL}/rest/v1/estudiantes?codigo_qr=eq.${codigo}`, {
             headers: { 'apikey': SUPABASE_KEY }
         }).then(r => r.json());
         
-        if (!resAlu.length) { soundError(); alert("🚫 QR Desconocido"); reiniciarScanner(); return; }
+        if (!resAlu.length) { 
+            soundError(); 
+            Swal.fire('Error', 'QR Desconocido', 'error'); 
+            reiniciarScanner(); 
+            return; 
+        }
+        
         const alumno = resAlu[0];
         const ahora = new Date();
         const [hE, mE] = HORA_ENTRADA.split(":").map(Number);
         const estado = (ahora.getHours() * 60 + ahora.getMinutes() <= hE * 60 + mE + 5) ? "P" : "A";
 
         await enviarASupabase({ 
-            estudiante_id: alumno.id, 
-            nombre_estudiante: alumno.nombre, 
-            fecha: fechaHoy, 
-            hora: horaTexto, 
-            estado: estado 
+            estudiante_id: alumno.id, nombre_estudiante: alumno.nombre, 
+            fecha: obtenerFechaLocal(), hora: obtenerHoraLocal(), estado: estado 
         });
-        soundCoin(); mostrarResultado(alumno.nombre, estado); actualizarStats();
-    } catch (e) { soundError(); alert("Error: " + e.message); reiniciarScanner(); }
+
+        soundCoin();
+        mostrarResultado(alumno.nombre, estado);
+        actualizarStats();
+    } catch (e) { 
+        soundError(); 
+        Swal.fire('Error', e.message, 'error'); 
+        reiniciarScanner(); 
+    }
 }
 
-async function registrarManual() {
-    const select = document.getElementById("licNombre");
-    const idAlu = select.value;
-    const nombreAlu = select.options[select.selectedIndex]?.getAttribute('data-nombre');
-    const estado = document.getElementById("licEstado").value;
-    const fechaHoy = obtenerFechaLocal();
-    if(!idAlu) return alert("Selecciona alumno");
-    try {
-        await enviarASupabase({ 
-            estudiante_id: parseInt(idAlu), 
-            nombre_estudiante: nombreAlu, 
-            fecha: fechaHoy, 
-            hora: obtenerHoraLocal(), 
-            estado: estado 
-        });
-        soundCoin(); alert("✅ Actualizado"); actualizarStats();
-    } catch (e) { soundError(); alert("Error: " + e.message); }
-}
-
-// --- FINALIZAR DÍA (CON PAUSA PARA GOOGLE) ---
+// --- FINALIZAR DÍA CON SWEETALERT (PRO) ---
 async function finalizarDia() {
-    if(!confirm("¿Asignar falta a ausentes?")) return;
     const fechaHoy = obtenerFechaLocal();
     const alus = await fetch(`${SUPABASE_URL}/rest/v1/estudiantes`, { headers: { 'apikey': SUPABASE_KEY } }).then(r => r.json());
     const asis = await fetch(`${SUPABASE_URL}/rest/v1/asistencias?fecha=eq.${fechaHoy}`, { headers: { 'apikey': SUPABASE_KEY } }).then(r => r.json());
     const idsConAsistencia = asis.map(a => a.estudiante_id);
-    
-    const faltas = alus.filter(al => !idsConAsistencia.includes(al.id)).map(al => ({
-        estudiante_id: al.id, nombre_estudiante: al.nombre, fecha: fechaHoy, hora: "00:00", estado: "F"
-    }));
+    const ausentes = alus.filter(al => !idsConAsistencia.includes(al.id));
 
-    if(faltas.length > 0) {
-        // Guardar en Supabase (rápido)
-        await fetch(`${SUPABASE_URL}/rest/v1/asistencias`, {
-            method: 'POST',
-            headers: { 'apikey': SUPABASE_KEY, 'Authorization': `Bearer ${SUPABASE_KEY}`, 'Content-Type': 'application/json' },
-            body: JSON.stringify(faltas)
-        });
-
-        // Enviar a Sheets uno por uno con pausa de 300ms
-        alert("Procesando faltas en Google Sheets... espera un momento.");
-        for (let f of faltas) {
-            if (GOOGLE_SCRIPT_URL !== "TU_URL_DE_APPS_SCRIPT_AQUÍ") {
-                fetch(GOOGLE_SCRIPT_URL, { method: 'POST', mode: 'no-cors', body: JSON.stringify(f) });
-                await new Promise(r => setTimeout(r, 300));
-            }
-        }
+    if (ausentes.length === 0) {
+        Swal.fire('¡Todo listo!', 'Todos los alumnos marcaron hoy.', 'success');
+        return;
     }
-    alert("Faltas procesadas");
+
+    // Ventana inicial
+    Swal.fire({
+        title: 'Cierre de Jornada',
+        text: `Hay ${ausentes.length} alumnos sin registro. ¿Quieres procesarlos uno por uno?`,
+        icon: 'question',
+        showCancelButton: true,
+        confirmButtonText: 'Sí, empezar',
+        cancelButtonText: 'Ahora no'
+    }).then(async (result) => {
+        if (result.isConfirmed) {
+            for (let al of ausentes) {
+                // Ventana individual por alumno
+                const { isConfirmed } = await Swal.fire({
+                    title: al.nombre,
+                    text: "¿Asignar falta (F) a este estudiante?",
+                    icon: 'warning',
+                    showCancelButton: true,
+                    confirmButtonColor: '#d33',
+                    cancelButtonColor: '#3085d6',
+                    confirmButtonText: 'Sí, poner Falta',
+                    cancelButtonText: 'Omitir'
+                });
+
+                if (isConfirmed) {
+                    await enviarASupabase({
+                        estudiante_id: al.id, nombre_estudiante: al.nombre,
+                        fecha: fechaHoy, hora: "00:00", estado: "F"
+                    });
+                    await new Promise(r => setTimeout(r, 400)); // Pausa para Sheets
+                }
+            }
+            Swal.fire('¡Hecho!', 'Se terminaron de procesar los ausentes.', 'success');
+            actualizarStats();
+        }
+    });
+}
+
+// --- RESTO DE FUNCIONES (Manual, Stats, etc.) ---
+async function registrarManual() {
+    const sel = document.getElementById("licNombre");
+    if(!sel.value) return;
+    await enviarASupabase({ 
+        estudiante_id: parseInt(sel.value), 
+        nombre_estudiante: sel.options[sel.selectedIndex].dataset.nombre,
+        fecha: obtenerFechaLocal(), hora: obtenerHoraLocal(), 
+        estado: document.getElementById("licEstado").value 
+    });
+    Swal.fire('Éxito', 'Registro actualizado', 'success');
     actualizarStats();
 }
 
-// --- OTROS ---
 async function actualizarStats() {
-    try {
-        const fechaHoy = obtenerFechaLocal();
-        const res = await fetch(`${SUPABASE_URL}/rest/v1/asistencias?fecha=eq.${fechaHoy}`, { headers: { 'apikey': SUPABASE_KEY } }).then(r => r.json());
-        const counts = { P: 0, A: 0, F: 0, L: 0 };
-        res.forEach(a => { if(counts[a.estado] !== undefined) counts[a.estado]++; });
-        document.getElementById("sP").innerText = counts.P;
-        document.getElementById("sA").innerText = counts.A;
-        document.getElementById("sF").innerText = counts.F;
-        document.getElementById("sL").innerText = counts.L;
-    } catch(e) {}
+    const res = await fetch(`${SUPABASE_URL}/rest/v1/asistencias?fecha=eq.${obtenerFechaLocal()}`, { headers: { 'apikey': SUPABASE_KEY } }).then(r => r.json());
+    const c = { P: 0, A: 0, F: 0, L: 0 };
+    res.forEach(a => { if(c[a.estado] !== undefined) c[a.estado]++; });
+    document.getElementById("sP").innerText = c.P;
+    document.getElementById("sA").innerText = c.A;
+    document.getElementById("sF").innerText = c.F;
+    document.getElementById("sL").innerText = c.L;
 }
 
 async function cargarListaAlumnos() {
-    try {
-        const res = await fetch(`${SUPABASE_URL}/rest/v1/estudiantes?select=id,nombre&order=nombre.asc`, { headers: { 'apikey': SUPABASE_KEY } }).then(r => r.json());
-        const select = document.getElementById("licNombre");
-        select.innerHTML = '<option value="">-- Seleccionar Alumno --</option>';
-        res.forEach(al => {
-            let opt = document.createElement("option");
-            opt.value = al.id; opt.setAttribute('data-nombre', al.nombre); opt.innerText = al.nombre;
-            select.appendChild(opt);
-        });
-    } catch(e) {}
+    const res = await fetch(`${SUPABASE_URL}/rest/v1/estudiantes?order=nombre.asc`, { headers: { 'apikey': SUPABASE_KEY } }).then(r => r.json());
+    const s = document.getElementById("licNombre");
+    s.innerHTML = '<option value="">-- Seleccionar Alumno --</option>';
+    res.forEach(al => {
+        let opt = document.createElement("option");
+        opt.value = al.id; opt.dataset.nombre = al.nombre; opt.innerText = al.nombre;
+        s.appendChild(opt);
+    });
 }
 
 async function buscarRegistros() {
-    const fecha = document.getElementById("busFecha").value;
-    const body = document.getElementById("bodyTabla");
-    body.innerHTML = "<tr><td colspan='3'>Buscando...</td></tr>";
+    const f = document.getElementById("busFecha").value;
+    const res = await fetch(`${SUPABASE_URL}/rest/v1/asistencias?fecha=eq.${f}&order=nombre_estudiante.asc`, { headers: { 'apikey': SUPABASE_KEY } }).then(r => r.json());
+    const b = document.getElementById("bodyTabla");
     document.getElementById("contTabla").style.display = "block";
-    const data = await fetch(`${SUPABASE_URL}/rest/v1/asistencias?fecha=eq.${fecha}&order=nombre_estudiante.asc`, { headers: { 'apikey': SUPABASE_KEY } }).then(r => r.json());
-    body.innerHTML = data.length ? "" : "<tr><td colspan='3'>Sin registros</td></tr>";
-    data.forEach(r => {
-        const color = r.estado === 'P' ? 'var(--success)' : (r.estado === 'A' ? 'var(--warning)' : (r.estado === 'F' ? 'var(--danger)' : 'var(--info)'));
-        body.innerHTML += `<tr><td>${r.nombre_estudiante}</td><td>${r.hora}</td><td><span class="badge" style="background:${color}">${r.estado}</span></td></tr>`;
-    });
+    b.innerHTML = res.map(r => `<tr><td>${r.nombre_estudiante}</td><td>${r.hora}</td><td>${r.estado}</td></tr>`).join('');
 }
 
 function mostrarResultado(n, e) {
@@ -214,10 +193,7 @@ function reiniciarScanner() {
 }
 
 function iniciarScanner() {
-    html5QrCode.start({ facingMode: "environment" }, { fps: 20, qrbox: 250 }, (codigo) => {
-        html5QrCode.stop();
-        registrarAsistencia(codigo);
-    }).catch(err => console.log(err));
+    html5QrCode.start({ facingMode: "environment" }, { fps: 20, qrbox: 250 }, registrarAsistencia);
 }
 
 window.onload = () => {
