@@ -1,6 +1,6 @@
 const SUPABASE_URL = "https://cplmxkvlrmiwunpojxke.supabase.co";
 const SUPABASE_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImNwbG14a3Zscm1pd3VucG9qeGtlIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzE5NjMwMTYsImV4cCI6MjA4NzUzOTAxNn0.ZugTlGxz38vBv7H9Cyn6Uq_HiKc7Za9rzDmO9RU--lc";
-const HORA_ENTRADA = "08:00"; 
+const HORA_ENTRADA = "14:05"; 
 const GOOGLE_SCRIPT_URL = "https://script.google.com/macros/s/AKfycbzY8t7Ih67FNxq20EgS87v-hPnmKVhb3ZQk1uEO_Z8qN6xnqh3uxXuFWYp9fipnz94/exec";
 
 let html5QrCode = new Html5Qrcode("reader");
@@ -173,3 +173,4 @@ window.onload = () => {
     document.getElementById('busFecha').value = obtenerFechaLocal();
     actualizarStats(); cargarListaAlumnos(); iniciarScanner();
 };
+
