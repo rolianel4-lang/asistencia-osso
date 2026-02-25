@@ -7,7 +7,6 @@ let html5QrCode = new Html5Qrcode("reader");
 let ultimoCodigo = null; 
 let ultimaVez = 0;       
 
-// --- FECHA Y HORA BOLIVIA ---
 const obtenerFechaLocal = () => {
     return new Intl.DateTimeFormat('en-CA', { 
         timeZone: 'America/La_Paz', year: 'numeric', month: '2-digit', day: '2-digit' 
@@ -20,7 +19,6 @@ const obtenerHoraLocal = () => {
     });
 };
 
-// --- ENVÍO SEGURO ---
 async function enviarDatosDuales(datos) {
     const resBusqueda = await fetch(`${SUPABASE_URL}/rest/v1/asistencias?estudiante_id=eq.${datos.estudiante_id}&fecha=eq.${datos.fecha}`, {
         headers: { 'apikey': SUPABASE_KEY }
@@ -47,10 +45,8 @@ async function enviarDatosDuales(datos) {
     return res.ok;
 }
 
-// --- REGISTRO QR ---
 async function registrarAsistencia(codigo) {
     const ahora = Date.now();
-    // Bloqueo de 5 segundos para evitar duplicados por ráfaga de cámara
     if (codigo === ultimoCodigo && (ahora - ultimaVez) < 5000) return; 
 
     ultimoCodigo = codigo;
@@ -94,7 +90,6 @@ async function registrarAsistencia(codigo) {
     } catch (e) { console.error(e); }
 }
 
-// --- FINALIZAR DÍA ---
 async function finalizarDia() {
     const fechaHoy = obtenerFechaLocal();
     const alus = await fetch(`${SUPABASE_URL}/rest/v1/estudiantes`, { headers: { 'apikey': SUPABASE_KEY } }).then(r => r.json());
@@ -124,7 +119,6 @@ async function finalizarDia() {
     }
 }
 
-// --- MANUAL ---
 async function registrarManual() {
     const sel = document.getElementById("licNombre");
     if(!sel.value) return;
@@ -138,7 +132,6 @@ async function registrarManual() {
     actualizarStats();
 }
 
-// --- STATS Y CARGA ---
 async function actualizarStats() {
     const res = await fetch(`${SUPABASE_URL}/rest/v1/asistencias?fecha=eq.${obtenerFechaLocal()}`, { headers: { 'apikey': SUPABASE_KEY } }).then(r => r.json());
     const c = { P: 0, A: 0, F: 0, L: 0 };
@@ -169,16 +162,8 @@ async function buscarRegistros() {
 }
 
 function iniciarScanner() {
-    // Configuración para forzar silencio en la librería
-    const config = { 
-        fps: 5, 
-        qrbox: 250, 
-        rememberLastUsedCamera: true,
-        aspectRatio: 1.0
-    };
-    
-    html5QrCode.start({ facingMode: "environment" }, config, registrarAsistencia)
-    .catch(err => console.error("Error cámara:", err));
+    html5QrCode.start({ facingMode: "environment" }, { fps: 5, qrbox: 250 }, registrarAsistencia)
+    .catch(err => console.error(err));
 }
 
 window.onload = () => {
