@@ -2,7 +2,7 @@ const SUPABASE_URL = "https://cplmxkvlrmiwunpojxke.supabase.co";
 const SUPABASE_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImNwbG14a3Zscm1pd3VucG9qeGtlIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzE5NjMwMTYsImV4cCI6MjA4NzUzOTAxNn0.ZugTlGxz38vBv7H9Cyn6Uq_HiKc7Za9rzDmO9RU--lc";
 const GOOGLE_SCRIPT_URL = "https://script.google.com/macros/s/AKfycbzY8t7Ih67FNxq20EgS87v-hPnmKVhb3ZQk1uEO_Z8qN6xnqh3uxXuFWYp9fipnz94/exec";
 
-// Valores por defecto si no se han configurado para un curso específico
+// Horario por defecto si el curso no tiene configuración previa en Supabase
 const HORA_ENTRADA_DEFECTO = "14:00";
 const TOLERANCIA_DEFECTO = 5;
 
@@ -27,22 +27,31 @@ const obtenerCursoSeleccionado = () => {
     return sel ? sel.value : "";
 };
 
-const obtenerConfigHorarioCurso = (curso) => {
+// Carga la configuración directamente desde Supabase
+async function obtenerConfigHorarioCurso(curso) {
     if (!curso) return { hora: HORA_ENTRADA_DEFECTO, tolerancia: TOLERANCIA_DEFECTO };
-    const configGuardada = localStorage.getItem(`config_horario_${curso}`);
-    if (configGuardada) {
-        return JSON.parse(configGuardada);
+    try {
+        const res = await fetch(`${SUPABASE_URL}/rest/v1/configuraciones_cursos?curso=eq.${encodeURIComponent(curso)}`, {
+            headers: { 'apikey': SUPABASE_KEY }
+        }).then(r => r.json());
+
+        if (res && res.length > 0) {
+            return { hora: res[0].hora_entrada, tolerancia: parseInt(res[0].tolerancia) };
+        }
+    } catch (e) {
+        console.error("Error al obtener configuración de horario:", e);
     }
     return { hora: HORA_ENTRADA_DEFECTO, tolerancia: TOLERANCIA_DEFECTO };
-};
+}
 
+// Guarda o actualiza la configuración en Supabase
 async function configurarHorarioCurso() {
     const cursoActual = obtenerCursoSeleccionado();
     if (!cursoActual) {
         return Swal.fire('Atención', 'Por favor selecciona primero un curso.', 'warning');
     }
 
-    const configActual = obtenerConfigHorarioCurso(cursoActual);
+    const configActual = await obtenerConfigHorarioCurso(cursoActual);
 
     const { value: formValues } = await Swal.fire({
         title: `Configurar Horario - ${cursoActual}`,
@@ -71,8 +80,41 @@ async function configurarHorarioCurso() {
     });
 
     if (formValues) {
-        localStorage.setItem(`config_horario_${cursoActual}`, JSON.stringify(formValues));
-        Swal.fire('Guardado', `Horario para ${cursoActual} actualizado: ${formValues.hora} (+${formValues.tolerancia} min tolerancia)`, 'success');
+        try {
+            // Verificar si ya existe el curso en configuraciones_cursos
+            const resExistente = await fetch(`${SUPABASE_URL}/rest/v1/configuraciones_cursos?curso=eq.${encodeURIComponent(cursoActual)}`, {
+                headers: { 'apikey': SUPABASE_KEY }
+            }).then(r => r.json());
+
+            let url = `${SUPABASE_URL}/rest/v1/configuraciones_cursos`;
+            let metodo = 'POST';
+
+            if (resExistente && resExistente.length > 0) {
+                metodo = 'PATCH';
+                url += `?id=eq.${resExistente[0].id}`;
+            }
+
+            const bodyData = {
+                curso: cursoActual,
+                hora_entrada: formValues.hora,
+                tolerancia: formValues.tolerancia
+            };
+
+            const res = await fetch(url, {
+                method: metodo,
+                headers: { 'apikey': SUPABASE_KEY, 'Authorization': `Bearer ${SUPABASE_KEY}`, 'Content-Type': 'application/json' },
+                body: JSON.stringify(bodyData)
+            });
+
+            if (res.ok) {
+                Swal.fire('Guardado', `Horario para ${cursoActual} guardado en la nube: ${formValues.hora} (+${formValues.tolerancia} min tolerancia)`, 'success');
+            } else {
+                Swal.fire('Error', 'No se pudo guardar la configuración.', 'error');
+            }
+        } catch (e) {
+            console.error(e);
+            Swal.fire('Error', 'Ocurrió un fallo en la conexión.', 'error');
+        }
     }
 }
 
@@ -141,7 +183,7 @@ async function registrarAsistencia(codigo) {
     if (codigo === ultimoCodigo && (ahora - ultimaVez) < 5000) return; 
 
     ultimoCodigo = codigo;
-    ultimaVez = me = ahora;
+    ultimaVez = ahora;
 
     try {
         const resAlu = await fetch(`${SUPABASE_URL}/rest/v1/estudiantes?codigo_qr=eq.${codigo}&curso=eq.${encodeURIComponent(cursoSeleccionado)}`, {
@@ -168,8 +210,8 @@ async function registrarAsistencia(codigo) {
             const horaBol = obtenerHoraLocal();
             const [hA, mA] = horaBol.split(":").map(Number);
             
-            // Obtener horario y tolerancia configurados para este curso
-            const configHorario = obtenerConfigHorarioCurso(cursoSeleccionado);
+            // Cargar la configuración de horario almacenada en Supabase
+            const configHorario = await obtenerConfigHorarioCurso(cursoSeleccionado);
             const [hE, mE] = configHorario.hora.split(":").map(Number);
             const tolerancia = configHorario.tolerancia;
 
