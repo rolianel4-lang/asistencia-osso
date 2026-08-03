@@ -34,19 +34,19 @@
     </style>
 </head>
 <body>
+
 <div class="header">
     <h1 style="margin:0; font-size:1.3rem;">🍄 ASISTENCIA OSSÓ IV</h1>
     <div id="displayFecha" style="font-size:0.9rem; margin-top:8px; opacity:0.9;"></div>
 </div>
 
 <div class="container">
-    <!-- Selección de Curso y Configuración de Horario -->
+    <!-- Selección de Curso limpia sin bloque de configuración -->
     <div class="card">
         <h3 style="margin:0; font-size:1rem; color:#334155;">📚 Selección de Curso</h3>
         <select id="filtroCurso">
             <option value="">Cargando cursos...</option>
         </select>
-        <button class="btn btn-sec" onclick="configurarHorarioCurso()">⚙️ Configurar Horario del Curso</button>
     </div>
 
     <!-- Lector QR -->
@@ -58,6 +58,7 @@
             <button class="btn" onclick="reiniciarScanner()">SIGUIENTE ESCANEO</button>
         </div>
     </div>
+
     <!-- Estadísticas -->
     <div class="stats-grid">
         <div class="stat-box" style="background:var(--success)"><span class="stat-val" id="sP">0</span>Presentes</div>
@@ -92,6 +93,7 @@
         </div>
     </div>
 </div>
+
 <script src="app.js"></script>
 </body>
 </html>
