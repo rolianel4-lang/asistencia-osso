@@ -1,14 +1,22 @@
 <!DOCTYPE html>
 <html lang="es">
-    <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Asistencia Enrique de Ossó IV</title>
+    <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
     <script src="https://unpkg.com/html5-qrcode"></script>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap" rel="stylesheet">
     <style>
-        :root { --primary: #e11d48; --success: #22c55e; --warning: #f59e0b; --danger: #ef4444; --info: #3b82f6; }
+        :root { 
+            --primary: #e11d48; 
+            --success: #22c55e; 
+            --warning: #f59e0b; 
+            --danger: #ef4444; 
+            --info: #3b82f6; 
+            --secondary: #475569;
+        }
+        * { box-sizing: border-box; }
         body { font-family: 'Inter', sans-serif; background: #f8fafc; margin: 0; padding-bottom: 40px; }
         .header { background: var(--primary); color: white; padding: 20px; text-align: center; border-bottom: 4px solid #991b1b; }
         .container { max-width: 450px; margin: auto; padding: 10px; }
@@ -17,6 +25,7 @@
         .stat-box { padding: 15px; border-radius: 12px; color: white; text-align: center; }
         .stat-val { font-size: 1.8rem; font-weight: 800; display: block; }
         .btn { background: #1e293b; color: white; border: none; padding: 14px; border-radius: 10px; width: 100%; cursor: pointer; font-weight: bold; font-size: 1rem; }
+        .btn-sec { background: var(--secondary); margin-top: 10px; }
         #reader { border-radius: 12px; overflow: hidden; background: black; width: 100% !important; }
         .badge { padding: 4px 8px; border-radius: 6px; color: white; font-size: 0.75rem; font-weight: bold; }
         table { width: 100%; border-collapse: collapse; font-size: 0.85rem; }
@@ -32,6 +41,16 @@
 </div>
 
 <div class="container">
+    <!-- Selección de Curso y Configuración de Horario -->
+    <div class="card">
+        <h3 style="margin:0; font-size:1rem; color:#334155;">📚 Selección de Curso</h3>
+        <select id="filtroCurso">
+            <option value="">Cargando cursos...</option>
+        </select>
+        <button class="btn btn-sec" onclick="configurarHorarioCurso()">⚙️ Configurar Horario del Curso</button>
+    </div>
+
+    <!-- Lector QR -->
     <div class="card">
         <div id="reader"></div>
         <div id="panelResultado" style="display:none; text-align:center;">
@@ -41,6 +60,7 @@
         </div>
     </div>
 
+    <!-- Estadísticas -->
     <div class="stats-grid">
         <div class="stat-box" style="background:var(--success)"><span class="stat-val" id="sP">0</span>Presentes</div>
         <div class="stat-box" style="background:var(--warning)"><span class="stat-val" id="sA">0</span>Atrasos</div>
@@ -50,9 +70,10 @@
 
     <button class="btn" style="background:var(--danger); margin-bottom: 20px;" onclick="finalizarDia()">🏁 FINALIZAR DÍA (FALTAS)</button>
 
+    <!-- Registro Manual -->
     <div class="card">
         <h3 style="margin:0; font-size:1rem; color:var(--info);">📝 Registro Manual / Licencia</h3>
-        <select id="licNombre"><option value="">Cargando...</option></select>
+        <select id="licNombre"><option value="">-- Selecciona un curso primero --</option></select>
         <select id="licEstado">
             <option value="L">Licencia</option>
             <option value="P">Presente (Manual)</option>
@@ -60,6 +81,7 @@
         <button class="btn" style="background:var(--info); margin-top:10px;" onclick="registrarManual()">GUARDAR</button>
     </div>
 
+    <!-- Buscador -->
     <div class="card">
         <h3 style="margin:0; font-size:1rem;">🔍 Buscador</h3>
         <input type="date" id="busFecha">
