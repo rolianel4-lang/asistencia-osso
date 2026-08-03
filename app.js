@@ -31,11 +31,27 @@ const obtenerCursoSeleccionado = () => {
 async function cargarBotonesCursos() {
     const contenedor = document.getElementById("contenedorBotonesCursos");
     try {
-        const res = await fetch(`${SUPABASE_URL}/rest/v1/estudiantes?select=curso`, { headers: { 'apikey': SUPABASE_KEY } }).then(r => r.json());
-        const cursosUnicos = [...new Set(res.map(item => item.curso).filter(Boolean))].sort();
+        const res = await fetch(`${SUPABASE_URL}/rest/v1/estudiantes?select=curso`, {
+            headers: { 
+                'apikey': SUPABASE_KEY,
+                'Authorization': `Bearer ${SUPABASE_KEY}`
+            }
+        });
+
+        if (!res.ok) {
+            throw new Error(`Error HTTP: ${res.status}`);
+        }
+
+        const data = await res.json();
+
+        if (!Array.isArray(data)) {
+            throw new Error("Respuesta inválida de Supabase.");
+        }
+
+        const cursosUnicos = [...new Set(data.map(item => item.curso).filter(Boolean))].sort();
         
         if (cursosUnicos.length === 0) {
-            contenedor.innerHTML = '<p style="color:#ef4444;">No se encontraron cursos registados en Supabase.</p>';
+            contenedor.innerHTML = '<p style="color:#ef4444;">No se encontraron cursos registrados en la tabla <b>estudiantes</b>.</p><button class="btn btn-sec" onclick="cargarBotonesCursos()">🔄 Reintentar</button>';
             return;
         }
 
@@ -49,7 +65,11 @@ async function cargarBotonesCursos() {
         });
     } catch (e) {
         console.error("Error al cargar cursos:", e);
-        contenedor.innerHTML = '<p style="color:#ef4444;">Error de conexión con la base de datos.</p>';
+        contenedor.innerHTML = `
+            <p style="color:#ef4444; font-size:0.9rem;">⚠️ No se pudo conectar con Supabase.</p>
+            <p style="color:#64748b; font-size:0.8rem;">Verifica la tabla 'estudiantes' o los permisos RLS en Supabase.</p>
+            <button class="btn btn-sec" onclick="cargarBotonesCursos()">🔄 Reintentar</button>
+        `;
     }
 }
 
@@ -86,7 +106,10 @@ async function obtenerConfigHorarioCurso(curso) {
     if (!curso) return { hora: HORA_ENTRADA_DEFECTO, tolerancia: TOLERANCIA_DEFECTO };
     try {
         const res = await fetch(`${SUPABASE_URL}/rest/v1/configuraciones_cursos?curso=eq.${encodeURIComponent(curso)}`, {
-            headers: { 'apikey': SUPABASE_KEY }
+            headers: { 
+                'apikey': SUPABASE_KEY,
+                'Authorization': `Bearer ${SUPABASE_KEY}`
+            }
         }).then(r => r.json());
 
         if (res && res.length > 0) {
@@ -136,7 +159,10 @@ async function configurarHorarioCurso() {
     if (formValues) {
         try {
             const resExistente = await fetch(`${SUPABASE_URL}/rest/v1/configuraciones_cursos?curso=eq.${encodeURIComponent(cursoActual)}`, {
-                headers: { 'apikey': SUPABASE_KEY }
+                headers: { 
+                    'apikey': SUPABASE_KEY,
+                    'Authorization': `Bearer ${SUPABASE_KEY}`
+                }
             }).then(r => r.json());
 
             let url = `${SUPABASE_URL}/rest/v1/configuraciones_cursos`;
@@ -178,7 +204,10 @@ async function configurarHorarioCurso() {
 
 async function enviarDatosDuales(datos) {
     const resBusqueda = await fetch(`${SUPABASE_URL}/rest/v1/asistencias?estudiante_id=eq.${datos.estudiante_id}&fecha=eq.${datos.fecha}`, {
-        headers: { 'apikey': SUPABASE_KEY }
+        headers: { 
+            'apikey': SUPABASE_KEY,
+            'Authorization': `Bearer ${SUPABASE_KEY}`
+        }
     });
     const existente = await resBusqueda.json();
 
@@ -192,7 +221,11 @@ async function enviarDatosDuales(datos) {
 
     const res = await fetch(url, {
         method: metodo,
-        headers: { 'apikey': SUPABASE_KEY, 'Authorization': `Bearer ${SUPABASE_KEY}`, 'Content-Type': 'application/json' },
+        headers: { 
+            'apikey': SUPABASE_KEY, 
+            'Authorization': `Bearer ${SUPABASE_KEY}`, 
+            'Content-Type': 'application/json' 
+        },
         body: JSON.stringify(datos)
     });
 
@@ -214,7 +247,10 @@ async function registrarAsistencia(codigo) {
 
     try {
         const resAlu = await fetch(`${SUPABASE_URL}/rest/v1/estudiantes?codigo_qr=eq.${codigo}&curso=eq.${encodeURIComponent(cursoSeleccionado)}`, {
-            headers: { 'apikey': SUPABASE_KEY }
+            headers: { 
+                'apikey': SUPABASE_KEY,
+                'Authorization': `Bearer ${SUPABASE_KEY}`
+            }
         }).then(r => r.json());
         
         if (!resAlu.length) {
@@ -263,8 +299,13 @@ async function finalizarDia() {
     if (!cursoSeleccionado) return;
 
     const fechaHoy = obtenerFechaLocal();
-    const alus = await fetch(`${SUPABASE_URL}/rest/v1/estudiantes?curso=eq.${encodeURIComponent(cursoSeleccionado)}`, { headers: { 'apikey': SUPABASE_KEY } }).then(r => r.json());
-    const asis = await fetch(`${SUPABASE_URL}/rest/v1/asistencias?fecha=eq.${fechaHoy}&curso=eq.${encodeURIComponent(cursoSeleccionado)}`, { headers: { 'apikey': SUPABASE_KEY } }).then(r => r.json());
+    const headers = { 
+        'apikey': SUPABASE_KEY, 
+        'Authorization': `Bearer ${SUPABASE_KEY}` 
+    };
+
+    const alus = await fetch(`${SUPABASE_URL}/rest/v1/estudiantes?curso=eq.${encodeURIComponent(cursoSeleccionado)}`, { headers }).then(r => r.json());
+    const asis = await fetch(`${SUPABASE_URL}/rest/v1/asistencias?fecha=eq.${fechaHoy}&curso=eq.${encodeURIComponent(cursoSeleccionado)}`, { headers }).then(r => r.json());
     
     const idsConAsistencia = asis.map(a => a.estudiante_id);
     const ausentes = alus.filter(al => !idsConAsistencia.includes(al.id));
@@ -318,7 +359,13 @@ async function actualizarStats() {
 
     let url = `${SUPABASE_URL}/rest/v1/asistencias?fecha=eq.${obtenerFechaLocal()}&curso=eq.${encodeURIComponent(cursoSeleccionado)}`;
 
-    const res = await fetch(url, { headers: { 'apikey': SUPABASE_KEY } }).then(r => r.json());
+    const res = await fetch(url, { 
+        headers: { 
+            'apikey': SUPABASE_KEY, 
+            'Authorization': `Bearer ${SUPABASE_KEY}` 
+        } 
+    }).then(r => r.json());
+
     const c = { P: 0, A: 0, F: 0, L: 0 };
     if (Array.isArray(res)) {
         res.forEach(a => { if(c[a.estado] !== undefined) c[a.estado]++; });
@@ -335,15 +382,23 @@ async function cargarListaAlumnos() {
     const s = document.getElementById("licNombre");
     if (!s || !cursoSeleccionado) return;
 
-    const res = await fetch(`${SUPABASE_URL}/rest/v1/estudiantes?curso=eq.${encodeURIComponent(cursoSeleccionado)}&order=nombre.asc`, { headers: { 'apikey': SUPABASE_KEY } }).then(r => r.json());
+    const res = await fetch(`${SUPABASE_URL}/rest/v1/estudiantes?curso=eq.${encodeURIComponent(cursoSeleccionado)}&order=nombre.asc`, { 
+        headers: { 
+            'apikey': SUPABASE_KEY, 
+            'Authorization': `Bearer ${SUPABASE_KEY}` 
+        } 
+    }).then(r => r.json());
+
     s.innerHTML = '<option value="">-- Seleccionar --</option>';
-    res.forEach(al => {
-        let opt = document.createElement("option");
-        opt.value = al.id; 
-        opt.dataset.nombre = al.nombre; 
-        opt.innerText = al.nombre;
-        s.appendChild(opt);
-    });
+    if (Array.isArray(res)) {
+        res.forEach(al => {
+            let opt = document.createElement("option");
+            opt.value = al.id; 
+            opt.dataset.nombre = al.nombre; 
+            opt.innerText = al.nombre;
+            s.appendChild(opt);
+        });
+    }
 }
 
 async function buscarRegistros() {
@@ -353,10 +408,18 @@ async function buscarRegistros() {
 
     let url = `${SUPABASE_URL}/rest/v1/asistencias?fecha=eq.${f}&curso=eq.${encodeURIComponent(cursoSeleccionado)}&order=nombre_estudiante.asc`;
 
-    const res = await fetch(url, { headers: { 'apikey': SUPABASE_KEY } }).then(r => r.json());
+    const res = await fetch(url, { 
+        headers: { 
+            'apikey': SUPABASE_KEY, 
+            'Authorization': `Bearer ${SUPABASE_KEY}` 
+        } 
+    }).then(r => r.json());
+
     const b = document.getElementById("bodyTabla");
     document.getElementById("contTabla").style.display = "block";
-    b.innerHTML = res.map(r => `<tr><td>${r.nombre_estudiante}</td><td>${r.hora}</td><td>${r.estado}</td></tr>`).join('');
+    if (Array.isArray(res)) {
+        b.innerHTML = res.map(r => `<tr><td>${r.nombre_estudiante}</td><td>${r.hora}</td><td>${r.estado}</td></tr>`).join('');
+    }
 }
 
 function iniciarScanner() {
