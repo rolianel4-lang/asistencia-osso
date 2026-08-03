@@ -9,6 +9,7 @@ const TOLERANCIA_DEFECTO = 5;
 let html5QrCode = new Html5Qrcode("reader");
 let ultimoCodigo = null; 
 let ultimaVez = 0;       
+let cursoSeleccionadoGlobal = "";
 
 const obtenerFechaLocal = () => {
     return new Intl.DateTimeFormat('en-CA', { 
@@ -23,9 +24,62 @@ const obtenerHoraLocal = () => {
 };
 
 const obtenerCursoSeleccionado = () => {
-    const sel = document.getElementById("filtroCurso");
-    return sel ? sel.value : "";
+    return cursoSeleccionadoGlobal;
 };
+
+// Genera los botones de cada curso al cargar la aplicación
+async function cargarBotonesCursos() {
+    const contenedor = document.getElementById("contenedorBotonesCursos");
+    try {
+        const res = await fetch(`${SUPABASE_URL}/rest/v1/estudiantes?select=curso`, { headers: { 'apikey': SUPABASE_KEY } }).then(r => r.json());
+        const cursosUnicos = [...new Set(res.map(item => item.curso).filter(Boolean))].sort();
+        
+        if (cursosUnicos.length === 0) {
+            contenedor.innerHTML = '<p style="color:#ef4444;">No se encontraron cursos registados en Supabase.</p>';
+            return;
+        }
+
+        contenedor.innerHTML = "";
+        cursosUnicos.forEach(curso => {
+            const btn = document.createElement("button");
+            btn.className = "btn-curso";
+            btn.innerText = `Curso ${curso}`;
+            btn.onclick = () => seleccionarCursoEIngresar(curso);
+            contenedor.appendChild(btn);
+        });
+    } catch (e) {
+        console.error("Error al cargar cursos:", e);
+        contenedor.innerHTML = '<p style="color:#ef4444;">Error de conexión con la base de datos.</p>';
+    }
+}
+
+// Inicia el sistema para el curso presionado
+async function seleccionarCursoEIngresar(curso) {
+    cursoSeleccionadoGlobal = curso;
+    document.getElementById("cursoActivoTitulo").innerText = curso;
+    
+    document.getElementById("pantallaInicio").style.display = "none";
+    document.getElementById("panelPrincipal").style.display = "block";
+
+    actualizarStats();
+    cargarListaAlumnos();
+    iniciarScanner();
+}
+
+// Regresa a la pantalla inicial de botones
+function volverAInicio() {
+    if (html5QrCode && html5QrCode.isScanning) {
+        html5QrCode.stop().then(() => {
+            cursoSeleccionadoGlobal = "";
+            document.getElementById("panelPrincipal").style.display = "none";
+            document.getElementById("pantallaInicio").style.display = "block";
+        }).catch(err => console.error("Error al detener el scanner:", err));
+    } else {
+        cursoSeleccionadoGlobal = "";
+        document.getElementById("panelPrincipal").style.display = "none";
+        document.getElementById("pantallaInicio").style.display = "block";
+    }
+}
 
 // Carga la configuración directamente desde Supabase
 async function obtenerConfigHorarioCurso(curso) {
@@ -81,7 +135,6 @@ async function configurarHorarioCurso() {
 
     if (formValues) {
         try {
-            // Verificar si ya existe el curso en configuraciones_cursos
             const resExistente = await fetch(`${SUPABASE_URL}/rest/v1/configuraciones_cursos?curso=eq.${encodeURIComponent(cursoActual)}`, {
                 headers: { 'apikey': SUPABASE_KEY }
             }).then(r => r.json());
@@ -102,12 +155,17 @@ async function configurarHorarioCurso() {
 
             const res = await fetch(url, {
                 method: metodo,
-                headers: { 'apikey': SUPABASE_KEY, 'Authorization': `Bearer ${SUPABASE_KEY}`, 'Content-Type': 'application/json' },
+                headers: { 
+                    'apikey': SUPABASE_KEY, 
+                    'Authorization': `Bearer ${SUPABASE_KEY}`, 
+                    'Content-Type': 'application/json',
+                    'Prefer': 'return=minimal'
+                },
                 body: JSON.stringify(bodyData)
             });
 
             if (res.ok) {
-                Swal.fire('Guardado', `Horario para ${cursoActual} guardado en la nube: ${formValues.hora} (+${formValues.tolerancia} min tolerancia)`, 'success');
+                Swal.fire('Guardado', `Horario para ${cursoActual} guardado en Supabase: ${formValues.hora} (+${formValues.tolerancia} min tolerancia)`, 'success');
             } else {
                 Swal.fire('Error', 'No se pudo guardar la configuración.', 'error');
             }
@@ -115,34 +173,6 @@ async function configurarHorarioCurso() {
             console.error(e);
             Swal.fire('Error', 'Ocurrió un fallo en la conexión.', 'error');
         }
-    }
-}
-
-async function cargarCursos() {
-    try {
-        const res = await fetch(`${SUPABASE_URL}/rest/v1/estudiantes?select=curso`, { headers: { 'apikey': SUPABASE_KEY } }).then(r => r.json());
-        const cursosUnicos = [...new Set(res.map(item => item.curso).filter(Boolean))].sort();
-        
-        const sel = document.getElementById("filtroCurso");
-        if (sel) {
-            sel.innerHTML = '<option value="">-- Seleccionar Curso --</option>';
-            cursosUnicos.forEach(c => {
-                let opt = document.createElement("option");
-                opt.value = c;
-                opt.innerText = c;
-                sel.appendChild(opt);
-            });
-        }
-    } catch (e) {
-        console.error("Error al cargar cursos:", e);
-    }
-}
-
-async function alCambiarCurso() {
-    actualizarStats();
-    cargarListaAlumnos();
-    if (document.getElementById("contTabla") && document.getElementById("contTabla").style.display !== "none") {
-        buscarRegistros();
     }
 }
 
@@ -174,10 +204,7 @@ async function enviarDatosDuales(datos) {
 
 async function registrarAsistencia(codigo) {
     const cursoSeleccionado = obtenerCursoSeleccionado();
-    if (!cursoSeleccionado) {
-        Swal.fire('Atención', 'Por favor selecciona un curso antes de escanear', 'warning');
-        return;
-    }
+    if (!cursoSeleccionado) return;
 
     const ahora = Date.now();
     if (codigo === ultimoCodigo && (ahora - ultimaVez) < 5000) return; 
@@ -210,7 +237,6 @@ async function registrarAsistencia(codigo) {
             const horaBol = obtenerHoraLocal();
             const [hA, mA] = horaBol.split(":").map(Number);
             
-            // Cargar la configuración de horario almacenada en Supabase
             const configHorario = await obtenerConfigHorarioCurso(cursoSeleccionado);
             const [hE, mE] = configHorario.hora.split(":").map(Number);
             const tolerancia = configHorario.tolerancia;
@@ -234,9 +260,7 @@ async function registrarAsistencia(codigo) {
 
 async function finalizarDia() {
     const cursoSeleccionado = obtenerCursoSeleccionado();
-    if (!cursoSeleccionado) {
-        return Swal.fire('Atención', 'Selecciona un curso para cerrar la jornada', 'warning');
-    }
+    if (!cursoSeleccionado) return;
 
     const fechaHoy = obtenerFechaLocal();
     const alus = await fetch(`${SUPABASE_URL}/rest/v1/estudiantes?curso=eq.${encodeURIComponent(cursoSeleccionado)}`, { headers: { 'apikey': SUPABASE_KEY } }).then(r => r.json());
@@ -290,10 +314,9 @@ async function registrarManual() {
 
 async function actualizarStats() {
     const cursoSeleccionado = obtenerCursoSeleccionado();
-    let url = `${SUPABASE_URL}/rest/v1/asistencias?fecha=eq.${obtenerFechaLocal()}`;
-    if (cursoSeleccionado) {
-        url += `&curso=eq.${encodeURIComponent(cursoSeleccionado)}`;
-    }
+    if (!cursoSeleccionado) return;
+
+    let url = `${SUPABASE_URL}/rest/v1/asistencias?fecha=eq.${obtenerFechaLocal()}&curso=eq.${encodeURIComponent(cursoSeleccionado)}`;
 
     const res = await fetch(url, { headers: { 'apikey': SUPABASE_KEY } }).then(r => r.json());
     const c = { P: 0, A: 0, F: 0, L: 0 };
@@ -310,12 +333,7 @@ async function actualizarStats() {
 async function cargarListaAlumnos() {
     const cursoSeleccionado = obtenerCursoSeleccionado();
     const s = document.getElementById("licNombre");
-    if (!s) return;
-
-    if (!cursoSeleccionado) {
-        s.innerHTML = '<option value="">-- Selecciona un curso primero --</option>';
-        return;
-    }
+    if (!s || !cursoSeleccionado) return;
 
     const res = await fetch(`${SUPABASE_URL}/rest/v1/estudiantes?curso=eq.${encodeURIComponent(cursoSeleccionado)}&order=nombre.asc`, { headers: { 'apikey': SUPABASE_KEY } }).then(r => r.json());
     s.innerHTML = '<option value="">-- Seleccionar --</option>';
@@ -331,12 +349,9 @@ async function cargarListaAlumnos() {
 async function buscarRegistros() {
     const f = document.getElementById("busFecha").value;
     const cursoSeleccionado = obtenerCursoSeleccionado();
+    if (!cursoSeleccionado) return;
 
-    let url = `${SUPABASE_URL}/rest/v1/asistencias?fecha=eq.${f}`;
-    if (cursoSeleccionado) {
-        url += `&curso=eq.${encodeURIComponent(cursoSeleccionado)}`;
-    }
-    url += `&order=nombre_estudiante.asc`;
+    let url = `${SUPABASE_URL}/rest/v1/asistencias?fecha=eq.${f}&curso=eq.${encodeURIComponent(cursoSeleccionado)}&order=nombre_estudiante.asc`;
 
     const res = await fetch(url, { headers: { 'apikey': SUPABASE_KEY } }).then(r => r.json());
     const b = document.getElementById("bodyTabla");
@@ -359,14 +374,5 @@ window.onload = async () => {
         document.getElementById('busFecha').value = obtenerFechaLocal();
     }
     
-    await cargarCursos();
-    
-    const selCurso = document.getElementById("filtroCurso");
-    if (selCurso) {
-        selCurso.addEventListener("change", alCambiarCurso);
-    }
-
-    actualizarStats(); 
-    cargarListaAlumnos(); 
-    iniciarScanner();
+    await cargarBotonesCursos();
 };
