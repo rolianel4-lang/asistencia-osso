@@ -26,9 +26,8 @@
         .stat-val { font-size: 1.8rem; font-weight: 800; display: block; }
         .btn { background: #1e293b; color: white; border: none; padding: 14px; border-radius: 10px; width: 100%; cursor: pointer; font-weight: bold; font-size: 1rem; }
         .btn-sec { background: var(--secondary); margin-top: 10px; }
-        .btn-curso { background: #0f172a; color: white; font-size: 1.2rem; padding: 18px; border-radius: 12px; border: none; cursor: pointer; font-weight: bold; width: 100%; margin-bottom: 10px; transition: transform 0.2s, background 0.2s; }
-        .btn-curso:active { transform: scale(0.98); background: var(--primary); }
         #reader { border-radius: 12px; overflow: hidden; background: black; width: 100% !important; }
+        .badge { padding: 4px 8px; border-radius: 6px; color: white; font-size: 0.75rem; font-weight: bold; }
         table { width: 100%; border-collapse: collapse; font-size: 0.85rem; }
         td, th { padding: 12px 8px; border-bottom: 1px solid #f1f5f9; text-align: left; }
         select, input { padding: 12px; border: 1px solid #cbd5e1; border-radius: 8px; width: 100%; margin-top: 8px; }
@@ -42,71 +41,56 @@
 </div>
 
 <div class="container">
-    <!-- Pantalla Inicial: Selección por Botones -->
-    <div id="pantallaInicio" class="card" style="text-align: center; padding: 25px 15px;">
-        <h2 style="margin-top:0; color:#334155; font-size:1.2rem;">SELECCIONA UN CURSO</h2>
-        <p style="color:#64748b; font-size:0.9rem; margin-bottom:20px;">Presiona el curso correspondiente para ingresar al sistema de asistencia:</p>
-        <div id="contenedorBotonesCursos">
-            <p style="color:#94a3b8;">Cargando cursos...</p>
+    <!-- Selección de Curso y Botón de Configuración -->
+    <div class="card">
+        <h3 style="margin:0; font-size:1rem; color:#334155;">📚 Selección de Curso</h3>
+        <select id="filtroCurso">
+            <option value="">Cargando cursos...</option>
+        </select>
+        <button class="btn btn-sec" onclick="configurarHorarioCurso()">⚙️ Configurar Horario del Curso</button>
+    </div>
+
+    <!-- Lector QR -->
+    <div class="card">
+        <div id="reader"></div>
+        <div id="panelResultado" style="display:none; text-align:center;">
+            <h2 id="resNombre"></h2>
+            <div id="resEmoji" style="font-size:4rem;"></div>
+            <button class="btn" onclick="reiniciarScanner()">SIGUIENTE ESCANEO</button>
         </div>
     </div>
 
-    <!-- Panel Principal (Oculto al inicio) -->
-    <div id="panelPrincipal" style="display: none;">
-        <!-- Indicador de Curso Activo -->
-        <div class="card" style="display: flex; justify-content: space-between; align-items: center;">
-            <div>
-                <span style="font-size: 0.8rem; color: #64748b; font-weight: bold;">CURSO ACTIVO:</span>
-                <h2 id="cursoActivoTitulo" style="margin: 0; color: var(--primary); font-size: 1.4rem;">-</h2>
-            </div>
-            <div style="display: flex; gap: 5px;">
-                <button class="btn btn-sec" style="padding: 8px 12px; font-size: 0.85rem; margin:0;" onclick="configurarHorarioCurso()">⚙️ Horarios</button>
-                <button class="btn" style="padding: 8px 12px; font-size: 0.85rem; background:#64748b; margin:0;" onclick="volverAInicio()">↩️ Cambiar</button>
-            </div>
-        </div>
+    <!-- Estadísticas -->
+    <div class="stats-grid">
+        <div class="stat-box" style="background:var(--success)"><span class="stat-val" id="sP">0</span>Presentes</div>
+        <div class="stat-box" style="background:var(--warning)"><span class="stat-val" id="sA">0</span>Atrasos</div>
+        <div class="stat-box" style="background:var(--danger)"><span class="stat-val" id="sF">0</span>Faltas</div>
+        <div class="stat-box" style="background:var(--info)"><span class="stat-val" id="sL">0</span>Licencias</div>
+    </div>
 
-        <!-- Lector QR -->
-        <div class="card">
-            <div id="reader"></div>
-            <div id="panelResultado" style="display:none; text-align:center;">
-                <h2 id="resNombre"></h2>
-                <div id="resEmoji" style="font-size:4rem;"></div>
-                <button class="btn" onclick="reiniciarScanner()">SIGUIENTE ESCANEO</button>
-            </div>
-        </div>
+    <button class="btn" style="background:var(--danger); margin-bottom: 20px;" onclick="finalizarDia()">🏁 FINALIZAR DÍA (FALTAS)</button>
 
-        <!-- Estadísticas -->
-        <div class="stats-grid">
-            <div class="stat-box" style="background:var(--success)"><span class="stat-val" id="sP">0</span>Presentes</div>
-            <div class="stat-box" style="background:var(--warning)"><span class="stat-val" id="sA">0</span>Atrasos</div>
-            <div class="stat-box" style="background:var(--danger)"><span class="stat-val" id="sF">0</span>Faltas</div>
-            <div class="stat-box" style="background:var(--info)"><span class="stat-val" id="sL">0</span>Licencias</div>
-        </div>
+    <!-- Registro Manual -->
+    <div class="card">
+        <h3 style="margin:0; font-size:1rem; color:var(--info);">📝 Registro Manual / Licencia</h3>
+        <select id="licNombre"><option value="">-- Selecciona un curso primero --</option></select>
+        <select id="licEstado">
+            <option value="L">Licencia</option>
+            <option value="P">Presente (Manual)</option>
+        </select>
+        <button class="btn" style="background:var(--info); margin-top:10px;" onclick="registrarManual()">GUARDAR</button>
+    </div>
 
-        <button class="btn" style="background:var(--danger); margin-bottom: 20px;" onclick="finalizarDia()">🏁 FINALIZAR DÍA (FALTAS)</button>
-
-        <!-- Registro Manual -->
-        <div class="card">
-            <h3 style="margin:0; font-size:1rem; color:var(--info);">📝 Registro Manual / Licencia</h3>
-            <select id="licNombre"><option value="">-- Selecciona un alumno --</option></select>
-            <select id="licEstado">
-                <option value="L">Licencia</option>
-                <option value="P">Presente (Manual)</option>
-            </select>
-            <button class="btn" style="background:var(--info); margin-top:10px;" onclick="registrarManual()">GUARDAR</button>
-        </div>
-
-        <!-- Buscador -->
-        <div class="card">
-            <h3 style="margin:0; font-size:1rem;">🔍 Buscador</h3>
-            <input type="date" id="busFecha">
-            <button class="btn" style="margin-top:10px;" onclick="buscarRegistros()">VER REGISTROS</button>
-            <div id="contTabla" style="display:none; margin-top:15px;">
-                <table>
-                    <thead><tr><th>Alumno</th><th>Hora</th><th>Est.</th></tr></thead>
-                    <tbody id="bodyTabla"></tbody>
-                </table>
-            </div>
+    <!-- Buscador -->
+    <div class="card">
+        <h3 style="margin:0; font-size:1rem;">🔍 Buscador</h3>
+        <input type="date" id="busFecha">
+        <button class="btn" style="margin-top:10px;" onclick="buscarRegistros()">VER REGISTROS</button>
+        <div id="contTabla" style="display:none; margin-top:15px;">
+            <table>
+                <thead><tr><th>Alumno</th><th>Hora</th><th>Est.</th></tr></thead>
+                <tbody id="bodyTabla"></tbody>
+            </table>
         </div>
     </div>
 </div>
