@@ -9,7 +9,6 @@ const TOLERANCIA_DEFECTO = 5;
 let html5QrCode = new Html5Qrcode("reader");
 let ultimoCodigo = null; 
 let ultimaVez = 0;       
-let cursoSeleccionadoGlobal = "";
 
 const obtenerFechaLocal = () => {
     return new Intl.DateTimeFormat('en-CA', { 
@@ -24,92 +23,16 @@ const obtenerHoraLocal = () => {
 };
 
 const obtenerCursoSeleccionado = () => {
-    return cursoSeleccionadoGlobal;
+    const sel = document.getElementById("filtroCurso");
+    return sel ? sel.value : "";
 };
-
-// Genera los botones de cada curso al cargar la aplicación
-async function cargarBotonesCursos() {
-    const contenedor = document.getElementById("contenedorBotonesCursos");
-    try {
-        const res = await fetch(`${SUPABASE_URL}/rest/v1/estudiantes?select=curso`, {
-            headers: { 
-                'apikey': SUPABASE_KEY,
-                'Authorization': `Bearer ${SUPABASE_KEY}`
-            }
-        });
-
-        if (!res.ok) {
-            throw new Error(`Error HTTP: ${res.status}`);
-        }
-
-        const data = await res.json();
-
-        if (!Array.isArray(data)) {
-            throw new Error("Respuesta inválida de Supabase.");
-        }
-
-        const cursosUnicos = [...new Set(data.map(item => item.curso).filter(Boolean))].sort();
-        
-        if (cursosUnicos.length === 0) {
-            contenedor.innerHTML = '<p style="color:#ef4444;">No se encontraron cursos registrados en la tabla <b>estudiantes</b>.</p><button class="btn btn-sec" onclick="cargarBotonesCursos()">🔄 Reintentar</button>';
-            return;
-        }
-
-        contenedor.innerHTML = "";
-        cursosUnicos.forEach(curso => {
-            const btn = document.createElement("button");
-            btn.className = "btn-curso";
-            btn.innerText = `Curso ${curso}`;
-            btn.onclick = () => seleccionarCursoEIngresar(curso);
-            contenedor.appendChild(btn);
-        });
-    } catch (e) {
-        console.error("Error al cargar cursos:", e);
-        contenedor.innerHTML = `
-            <p style="color:#ef4444; font-size:0.9rem;">⚠️ No se pudo conectar con Supabase.</p>
-            <p style="color:#64748b; font-size:0.8rem;">Verifica la tabla 'estudiantes' o los permisos RLS en Supabase.</p>
-            <button class="btn btn-sec" onclick="cargarBotonesCursos()">🔄 Reintentar</button>
-        `;
-    }
-}
-
-// Inicia el sistema para el curso presionado
-async function seleccionarCursoEIngresar(curso) {
-    cursoSeleccionadoGlobal = curso;
-    document.getElementById("cursoActivoTitulo").innerText = curso;
-    
-    document.getElementById("pantallaInicio").style.display = "none";
-    document.getElementById("panelPrincipal").style.display = "block";
-
-    actualizarStats();
-    cargarListaAlumnos();
-    iniciarScanner();
-}
-
-// Regresa a la pantalla inicial de botones
-function volverAInicio() {
-    if (html5QrCode && html5QrCode.isScanning) {
-        html5QrCode.stop().then(() => {
-            cursoSeleccionadoGlobal = "";
-            document.getElementById("panelPrincipal").style.display = "none";
-            document.getElementById("pantallaInicio").style.display = "block";
-        }).catch(err => console.error("Error al detener el scanner:", err));
-    } else {
-        cursoSeleccionadoGlobal = "";
-        document.getElementById("panelPrincipal").style.display = "none";
-        document.getElementById("pantallaInicio").style.display = "block";
-    }
-}
 
 // Carga la configuración directamente desde Supabase
 async function obtenerConfigHorarioCurso(curso) {
     if (!curso) return { hora: HORA_ENTRADA_DEFECTO, tolerancia: TOLERANCIA_DEFECTO };
     try {
         const res = await fetch(`${SUPABASE_URL}/rest/v1/configuraciones_cursos?curso=eq.${encodeURIComponent(curso)}`, {
-            headers: { 
-                'apikey': SUPABASE_KEY,
-                'Authorization': `Bearer ${SUPABASE_KEY}`
-            }
+            headers: { 'apikey': SUPABASE_KEY }
         }).then(r => r.json());
 
         if (res && res.length > 0) {
@@ -158,11 +81,9 @@ async function configurarHorarioCurso() {
 
     if (formValues) {
         try {
+            // Verificar si ya existe el curso en configuraciones_cursos
             const resExistente = await fetch(`${SUPABASE_URL}/rest/v1/configuraciones_cursos?curso=eq.${encodeURIComponent(cursoActual)}`, {
-                headers: { 
-                    'apikey': SUPABASE_KEY,
-                    'Authorization': `Bearer ${SUPABASE_KEY}`
-                }
+                headers: { 'apikey': SUPABASE_KEY }
             }).then(r => r.json());
 
             let url = `${SUPABASE_URL}/rest/v1/configuraciones_cursos`;
@@ -202,12 +123,37 @@ async function configurarHorarioCurso() {
     }
 }
 
+async function cargarCursos() {
+    try {
+        const res = await fetch(`${SUPABASE_URL}/rest/v1/estudiantes?select=curso`, { headers: { 'apikey': SUPABASE_KEY } }).then(r => r.json());
+        const cursosUnicos = [...new Set(res.map(item => item.curso).filter(Boolean))].sort();
+        
+        const sel = document.getElementById("filtroCurso");
+        if (sel) {
+            sel.innerHTML = '<option value="">-- Seleccionar Curso --</option>';
+            cursosUnicos.forEach(c => {
+                let opt = document.createElement("option");
+                opt.value = c;
+                opt.innerText = c;
+                sel.appendChild(opt);
+            });
+        }
+    } catch (e) {
+        console.error("Error al cargar cursos:", e);
+    }
+}
+
+async function alCambiarCurso() {
+    actualizarStats();
+    cargarListaAlumnos();
+    if (document.getElementById("contTabla") && document.getElementById("contTabla").style.display !== "none") {
+        buscarRegistros();
+    }
+}
+
 async function enviarDatosDuales(datos) {
     const resBusqueda = await fetch(`${SUPABASE_URL}/rest/v1/asistencias?estudiante_id=eq.${datos.estudiante_id}&fecha=eq.${datos.fecha}`, {
-        headers: { 
-            'apikey': SUPABASE_KEY,
-            'Authorization': `Bearer ${SUPABASE_KEY}`
-        }
+        headers: { 'apikey': SUPABASE_KEY }
     });
     const existente = await resBusqueda.json();
 
@@ -221,11 +167,7 @@ async function enviarDatosDuales(datos) {
 
     const res = await fetch(url, {
         method: metodo,
-        headers: { 
-            'apikey': SUPABASE_KEY, 
-            'Authorization': `Bearer ${SUPABASE_KEY}`, 
-            'Content-Type': 'application/json' 
-        },
+        headers: { 'apikey': SUPABASE_KEY, 'Authorization': `Bearer ${SUPABASE_KEY}`, 'Content-Type': 'application/json' },
         body: JSON.stringify(datos)
     });
 
@@ -237,7 +179,10 @@ async function enviarDatosDuales(datos) {
 
 async function registrarAsistencia(codigo) {
     const cursoSeleccionado = obtenerCursoSeleccionado();
-    if (!cursoSeleccionado) return;
+    if (!cursoSeleccionado) {
+        Swal.fire('Atención', 'Por favor selecciona un curso antes de escanear', 'warning');
+        return;
+    }
 
     const ahora = Date.now();
     if (codigo === ultimoCodigo && (ahora - ultimaVez) < 5000) return; 
@@ -247,10 +192,7 @@ async function registrarAsistencia(codigo) {
 
     try {
         const resAlu = await fetch(`${SUPABASE_URL}/rest/v1/estudiantes?codigo_qr=eq.${codigo}&curso=eq.${encodeURIComponent(cursoSeleccionado)}`, {
-            headers: { 
-                'apikey': SUPABASE_KEY,
-                'Authorization': `Bearer ${SUPABASE_KEY}`
-            }
+            headers: { 'apikey': SUPABASE_KEY }
         }).then(r => r.json());
         
         if (!resAlu.length) {
@@ -273,6 +215,7 @@ async function registrarAsistencia(codigo) {
             const horaBol = obtenerHoraLocal();
             const [hA, mA] = horaBol.split(":").map(Number);
             
+            // Cargar la configuración de horario almacenada en Supabase
             const configHorario = await obtenerConfigHorarioCurso(cursoSeleccionado);
             const [hE, mE] = configHorario.hora.split(":").map(Number);
             const tolerancia = configHorario.tolerancia;
@@ -296,16 +239,13 @@ async function registrarAsistencia(codigo) {
 
 async function finalizarDia() {
     const cursoSeleccionado = obtenerCursoSeleccionado();
-    if (!cursoSeleccionado) return;
+    if (!cursoSeleccionado) {
+        return Swal.fire('Atención', 'Selecciona un curso para cerrar la jornada', 'warning');
+    }
 
     const fechaHoy = obtenerFechaLocal();
-    const headers = { 
-        'apikey': SUPABASE_KEY, 
-        'Authorization': `Bearer ${SUPABASE_KEY}` 
-    };
-
-    const alus = await fetch(`${SUPABASE_URL}/rest/v1/estudiantes?curso=eq.${encodeURIComponent(cursoSeleccionado)}`, { headers }).then(r => r.json());
-    const asis = await fetch(`${SUPABASE_URL}/rest/v1/asistencias?fecha=eq.${fechaHoy}&curso=eq.${encodeURIComponent(cursoSeleccionado)}`, { headers }).then(r => r.json());
+    const alus = await fetch(`${SUPABASE_URL}/rest/v1/estudiantes?curso=eq.${encodeURIComponent(cursoSeleccionado)}`, { headers: { 'apikey': SUPABASE_KEY } }).then(r => r.json());
+    const asis = await fetch(`${SUPABASE_URL}/rest/v1/asistencias?fecha=eq.${fechaHoy}&curso=eq.${encodeURIComponent(cursoSeleccionado)}`, { headers: { 'apikey': SUPABASE_KEY } }).then(r => r.json());
     
     const idsConAsistencia = asis.map(a => a.estudiante_id);
     const ausentes = alus.filter(al => !idsConAsistencia.includes(al.id));
@@ -355,17 +295,12 @@ async function registrarManual() {
 
 async function actualizarStats() {
     const cursoSeleccionado = obtenerCursoSeleccionado();
-    if (!cursoSeleccionado) return;
+    let url = `${SUPABASE_URL}/rest/v1/asistencias?fecha=eq.${obtenerFechaLocal()}`;
+    if (cursoSeleccionado) {
+        url += `&curso=eq.${encodeURIComponent(cursoSeleccionado)}`;
+    }
 
-    let url = `${SUPABASE_URL}/rest/v1/asistencias?fecha=eq.${obtenerFechaLocal()}&curso=eq.${encodeURIComponent(cursoSeleccionado)}`;
-
-    const res = await fetch(url, { 
-        headers: { 
-            'apikey': SUPABASE_KEY, 
-            'Authorization': `Bearer ${SUPABASE_KEY}` 
-        } 
-    }).then(r => r.json());
-
+    const res = await fetch(url, { headers: { 'apikey': SUPABASE_KEY } }).then(r => r.json());
     const c = { P: 0, A: 0, F: 0, L: 0 };
     if (Array.isArray(res)) {
         res.forEach(a => { if(c[a.estado] !== undefined) c[a.estado]++; });
@@ -380,46 +315,38 @@ async function actualizarStats() {
 async function cargarListaAlumnos() {
     const cursoSeleccionado = obtenerCursoSeleccionado();
     const s = document.getElementById("licNombre");
-    if (!s || !cursoSeleccionado) return;
+    if (!s) return;
 
-    const res = await fetch(`${SUPABASE_URL}/rest/v1/estudiantes?curso=eq.${encodeURIComponent(cursoSeleccionado)}&order=nombre.asc`, { 
-        headers: { 
-            'apikey': SUPABASE_KEY, 
-            'Authorization': `Bearer ${SUPABASE_KEY}` 
-        } 
-    }).then(r => r.json());
-
-    s.innerHTML = '<option value="">-- Seleccionar --</option>';
-    if (Array.isArray(res)) {
-        res.forEach(al => {
-            let opt = document.createElement("option");
-            opt.value = al.id; 
-            opt.dataset.nombre = al.nombre; 
-            opt.innerText = al.nombre;
-            s.appendChild(opt);
-        });
+    if (!cursoSeleccionado) {
+        s.innerHTML = '<option value="">-- Selecciona un curso primero --</option>';
+        return;
     }
+
+    const res = await fetch(`${SUPABASE_URL}/rest/v1/estudiantes?curso=eq.${encodeURIComponent(cursoSeleccionado)}&order=nombre.asc`, { headers: { 'apikey': SUPABASE_KEY } }).then(r => r.json());
+    s.innerHTML = '<option value="">-- Seleccionar --</option>';
+    res.forEach(al => {
+        let opt = document.createElement("option");
+        opt.value = al.id; 
+        opt.dataset.nombre = al.nombre; 
+        opt.innerText = al.nombre;
+        s.appendChild(opt);
+    });
 }
 
 async function buscarRegistros() {
     const f = document.getElementById("busFecha").value;
     const cursoSeleccionado = obtenerCursoSeleccionado();
-    if (!cursoSeleccionado) return;
 
-    let url = `${SUPABASE_URL}/rest/v1/asistencias?fecha=eq.${f}&curso=eq.${encodeURIComponent(cursoSeleccionado)}&order=nombre_estudiante.asc`;
+    let url = `${SUPABASE_URL}/rest/v1/asistencias?fecha=eq.${f}`;
+    if (cursoSeleccionado) {
+        url += `&curso=eq.${encodeURIComponent(cursoSeleccionado)}`;
+    }
+    url += `&order=nombre_estudiante.asc`;
 
-    const res = await fetch(url, { 
-        headers: { 
-            'apikey': SUPABASE_KEY, 
-            'Authorization': `Bearer ${SUPABASE_KEY}` 
-        } 
-    }).then(r => r.json());
-
+    const res = await fetch(url, { headers: { 'apikey': SUPABASE_KEY } }).then(r => r.json());
     const b = document.getElementById("bodyTabla");
     document.getElementById("contTabla").style.display = "block";
-    if (Array.isArray(res)) {
-        b.innerHTML = res.map(r => `<tr><td>${r.nombre_estudiante}</td><td>${r.hora}</td><td>${r.estado}</td></tr>`).join('');
-    }
+    b.innerHTML = res.map(r => `<tr><td>${r.nombre_estudiante}</td><td>${r.hora}</td><td>${r.estado}</td></tr>`).join('');
 }
 
 function iniciarScanner() {
@@ -437,5 +364,14 @@ window.onload = async () => {
         document.getElementById('busFecha').value = obtenerFechaLocal();
     }
     
-    await cargarBotonesCursos();
+    await cargarCursos();
+    
+    const selCurso = document.getElementById("filtroCurso");
+    if (selCurso) {
+        selCurso.addEventListener("change", alCambiarCurso);
+    }
+
+    actualizarStats(); 
+    cargarListaAlumnos(); 
+    iniciarScanner();
 };
